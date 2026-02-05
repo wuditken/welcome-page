@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-股票价格监控脚本 (yfinance版 v2)
-使用 Yahoo Finance API 获取实时价格，带重试机制
+股票价格监控脚本 (腾讯财经API版 v3)
+使用腾讯财经API获取实时价格，稳定快速
 """
 
-import yfinance as yf
+import requests
 import json
-import os
 import time
 from datetime import datetime
 
 # 股票持仓配置
+# 港股代码: hk开头 + 代码
+# 美股代码: us开头 + 代码
 PORTFOLIO = {
     "港股": {
-        "07709.HK": {"name": "XL二南方海力士", "shares": 1600, "cost": 29.76, "currency": "HKD", "threshold": 0.05}
+        "07709": {"name": "XL二南方海力士", "shares": 1600, "cost": 29.76, "currency": "HKD", "threshold": 0.05}
     },
     "美股": {
         "SNXX": {"name": "Tradr 2X Long", "shares": 162, "cost": 36.38, "currency": "USD", "threshold": 0.05},
@@ -26,77 +27,74 @@ PORTFOLIO = {
 HKD_TO_CNY = 0.8718
 USD_TO_CNY = 7.19
 
-def get_stock_price(symbol, market, retry=2):
-    """获取股票当前价格，带重试机制"""
-    for attempt in range(retry + 1):
-        try:
-            # 港股限制更严格，增加延迟
-            delay = 8 if market == "港股" else 3
-            time.sleep(delay)
-            
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="1d")
-            if not hist.empty:
-                return hist["Close"].iloc[-1]
-            
-            # 如果没数据，等待后重试
-            if attempt < retry:
-                print(f"  ⏳ {symbol} 数据为空，等待重试...")
-                time.sleep(10)
-                
-        except Exception as e:
-            error_msg = str(e)
-            if "Rate limited" in error_msg or "Too Many Requests" in error_msg:
-                print(f"  ⚠️  {symbol} 被限制，等待60秒后重试...")
-                time.sleep(60)
-                continue
-            print(f"  ❌ 获取 {symbol} 价格失败: {e}")
-            break
+def get_price_from_tencent(code, market):
+    """从腾讯财经API获取价格"""
+    try:
+        # 港股: us美股
+        if market == "港股":
+            url = f"https://qt.gtimg.cn/q=hk{code}"
+        else:
+            url = f"https://qt.gtimg.cn/q=us{code}"
+        
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            # 解析返回数据 (格式: v_usSNXX="200~...")
+            text = response.text
+            # 找到 = 后面的数据
+            if '=' in text:
+                data = text.split('=')[1].strip('";')
+                parts = data.split('~')
+                if len(parts) > 32:
+                    current_price = float(parts[3])  # 当前价
+                    return current_price
+    except Exception as e:
+        print(f"  ❌ 获取 {code} 价格失败: {e}")
     return None
 
 def check_prices():
     """检查所有股票价格"""
     alerts = []
-    total_value = 0
     total_cost = 0
+    total_value = 0
     
     print(f"\n{'='*60}")
     print(f"📊 股票价格检查 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"数据来源: 腾讯财经API")
     print(f"{'='*60}\n")
     
     for market, stocks in PORTFOLIO.items():
         print(f"--- {market} ---")
-        for symbol, info in stocks.items():
+        for code, info in stocks.items():
             name = info['name']
             shares = info['shares']
             cost = info['cost']
             currency = info['currency']
             threshold = info['threshold']
             
-            price = get_stock_price(symbol, market)
+            price = get_price_from_tencent(code, market)
+            time.sleep(1)  # 避免请求过快
+            
             change = (price - cost) / cost if price and cost else None
             
-            current_value = price * shares if price else 0
-            cost_value = cost * shares
-            
-            # 转换为人民币
             rate = HKD_TO_CNY if currency == "HKD" else USD_TO_CNY
-            current_cny = current_value * rate
-            cost_cny = cost_value * rate
+            cost_cny = cost * shares * rate
+            value_cny = price * shares * rate if price else 0
             
-            total_value += current_cny
             total_cost += cost_cny
+            total_value += value_cny
             
             # 检查异动
             if change and abs(change) >= threshold:
                 direction = "↑" if change > 0 else "↓"
-                alerts.append(f"🔔 {symbol} {name}: {direction}{abs(change)*100:.2f}% (当前:¥{price:.2f})")
+                alerts.append(f"🔔 {code} {name}: {direction}{abs(change)*100:.2f}% (当前:¥{price:.2f})")
             
-            price_str = f"¥{price:.2f}" if price else "N/A (限流)"
+            price_str = f"¥{price:.2f}" if price else "N/A"
             change_str = f"{'+' if change and change > 0 else ''}{change*100:.2f}%" if change else "N/A"
             emoji = "🔔" if change and abs(change) >= threshold else "  "
             
-            print(f"  {emoji} {symbol} | {name}")
+            print(f"  {emoji} {code} | {name}")
             print(f"      成本: ¥{cost:.2f} ({currency}) | 当前: {price_str} | 涨跌: {change_str}")
         print()
     
