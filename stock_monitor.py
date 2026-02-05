@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-股票价格监控脚本 (yfinance版)
-使用 Yahoo Finance API 获取实时价格
+股票价格监控脚本 (yfinance版 v2)
+使用 Yahoo Finance API 获取实时价格，带重试机制
 """
 
 import yfinance as yf
 import json
 import os
+import time
 from datetime import datetime
 
 # 股票持仓配置
@@ -25,15 +26,32 @@ PORTFOLIO = {
 HKD_TO_CNY = 0.8718
 USD_TO_CNY = 7.19
 
-def get_stock_price(symbol, market):
-    """获取股票当前价格"""
-    try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="1d")
-        if not hist.empty:
-            return hist["Close"].iloc[-1]
-    except Exception as e:
-        print(f"获取 {symbol} 价格失败: {e}")
+def get_stock_price(symbol, market, retry=2):
+    """获取股票当前价格，带重试机制"""
+    for attempt in range(retry + 1):
+        try:
+            # 港股限制更严格，增加延迟
+            delay = 8 if market == "港股" else 3
+            time.sleep(delay)
+            
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="1d")
+            if not hist.empty:
+                return hist["Close"].iloc[-1]
+            
+            # 如果没数据，等待后重试
+            if attempt < retry:
+                print(f"  ⏳ {symbol} 数据为空，等待重试...")
+                time.sleep(10)
+                
+        except Exception as e:
+            error_msg = str(e)
+            if "Rate limited" in error_msg or "Too Many Requests" in error_msg:
+                print(f"  ⚠️  {symbol} 被限制，等待60秒后重试...")
+                time.sleep(60)
+                continue
+            print(f"  ❌ 获取 {symbol} 价格失败: {e}")
+            break
     return None
 
 def check_prices():
@@ -74,7 +92,7 @@ def check_prices():
                 direction = "↑" if change > 0 else "↓"
                 alerts.append(f"🔔 {symbol} {name}: {direction}{abs(change)*100:.2f}% (当前:¥{price:.2f})")
             
-            price_str = f"¥{price:.2f}" if price else "N/A"
+            price_str = f"¥{price:.2f}" if price else "N/A (限流)"
             change_str = f"{'+' if change and change > 0 else ''}{change*100:.2f}%" if change else "N/A"
             emoji = "🔔" if change and abs(change) >= threshold else "  "
             
