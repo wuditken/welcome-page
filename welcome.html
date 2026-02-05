@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome & Memo</title>
+    <title>Welcome & Tools</title>
     <style>
         * {
             margin: 0;
@@ -35,19 +35,21 @@
             animation: heartbeat 1.5s infinite;
             display: inline-block;
         }
-        .memo-section {
+        .section {
             background: rgba(255,255,255,0.95);
             border-radius: 20px;
             padding: 25px;
+            margin-bottom: 20px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-        .memo-section h2 {
+        .section h2 {
             color: #333;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
+        /* 备忘录样式 */
         .input-group {
             display: flex;
             gap: 10px;
@@ -122,6 +124,7 @@
             flex: 1;
             font-size: 16px;
             color: #333;
+            cursor: pointer;
         }
         .memo-item .delete {
             background: #ff6b6b;
@@ -141,6 +144,59 @@
             color: #999;
             padding: 30px;
             font-style: italic;
+        }
+        /* 计算器样式 */
+        .calculator {
+            background: #2d2d2d;
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .calc-display {
+            background: #1a1a1a;
+            color: white;
+            font-size: 2.5rem;
+            text-align: right;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .calc-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .calc-btn {
+            padding: 20px;
+            font-size: 1.3rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .calc-btn:active {
+            transform: scale(0.95);
+        }
+        .calc-btn.number {
+            background: #4a4a4a;
+            color: white;
+        }
+        .calc-btn.operator {
+            background: #ff9500;
+            color: white;
+        }
+        .calc-btn.function {
+            background: #8e8e8e;
+            color: white;
+        }
+        .calc-btn.equals {
+            background: #34c759;
+            color: white;
+            grid-column: span 2;
+        }
+        .calc-btn.zero {
+            grid-column: span 2;
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-20px); }
@@ -163,17 +219,52 @@
             <p>很高兴见到你！</p>
         </div>
         
-        <div class="memo-section">
-            <h2>📝 我的备忘录</h2>
+        <!-- 备忘录 -->
+        <div class="section">
+            <h2>📝 备忘录</h2>
             <div class="input-group">
                 <input type="text" id="memoInput" placeholder="添加新的备忘录..." onkeypress="handleKeyPress(event)">
                 <button onclick="addMemo()">添加</button>
             </div>
             <ul class="memo-list" id="memoList"></ul>
         </div>
+        
+        <!-- 计算器 -->
+        <div class="section">
+            <h2>🔢 计算器</h2>
+            <div class="calculator">
+                <div class="calc-display" id="calcDisplay">0</div>
+                <div class="calc-buttons">
+                    <button class="calc-btn function" onclick="clearCalc()">AC</button>
+                    <button class="calc-btn function" onclick="toggleSign()">±</button>
+                    <button class="calc-btn function" onclick="percent()">%</button>
+                    <button class="calc-btn operator" onclick="setOperator('/')">÷</button>
+                    
+                    <button class="calc-btn number" onclick="appendNumber('7')">7</button>
+                    <button class="calc-btn number" onclick="appendNumber('8')">8</button>
+                    <button class="calc-btn number" onclick="appendNumber('9')">9</button>
+                    <button class="calc-btn operator" onclick="setOperator('*')">×</button>
+                    
+                    <button class="calc-btn number" onclick="appendNumber('4')">4</button>
+                    <button class="calc-btn number" onclick="appendNumber('5')">5</button>
+                    <button class="calc-btn number" onclick="appendNumber('6')">6</button>
+                    <button class="calc-btn operator" onclick="setOperator('-')">−</button>
+                    
+                    <button class="calc-btn number" onclick="appendNumber('1')">1</button>
+                    <button class="calc-btn number" onclick="appendNumber('2')">2</button>
+                    <button class="calc-btn number" onclick="appendNumber('3')">3</button>
+                    <button class="calc-btn operator" onclick="setOperator('+')">+</button>
+                    
+                    <button class="calc-btn number zero" onclick="appendNumber('0')">0</button>
+                    <button class="calc-btn number" onclick="appendDecimal()">.</button>
+                    <button class="calc-btn equals" onclick="calculate()">=</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
+        // ==================== 备忘录 ====================
         let memos = JSON.parse(localStorage.getItem('memos') || '[]');
         renderMemos();
 
@@ -232,6 +323,104 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // ==================== 计算器 ====================
+        let currentNumber = '0';
+        let previousNumber = '';
+        let operator = '';
+        let shouldResetScreen = false;
+
+        const display = document.getElementById('calcDisplay');
+
+        function updateDisplay() {
+            display.textContent = currentNumber;
+            if (currentNumber.length > 9) {
+                display.style.fontSize = '1.5rem';
+            } else {
+                display.style.fontSize = '2.5rem';
+            }
+        }
+
+        function appendNumber(num) {
+            if (shouldResetScreen) {
+                currentNumber = '';
+                shouldResetScreen = false;
+            }
+            if (currentNumber === '0' && num !== '.') {
+                currentNumber = num;
+            } else {
+                currentNumber += num;
+            }
+            updateDisplay();
+        }
+
+        function appendDecimal() {
+            if (shouldResetScreen) {
+                currentNumber = '0';
+                shouldResetScreen = false;
+            }
+            if (!currentNumber.includes('.')) {
+                currentNumber += '.';
+            }
+            updateDisplay();
+        }
+
+        function setOperator(op) {
+            if (operator !== '') calculate();
+            previousNumber = currentNumber;
+            operator = op;
+            shouldResetScreen = true;
+        }
+
+        function calculate() {
+            if (operator === '' || shouldResetScreen) return;
+            
+            let result;
+            const prev = parseFloat(previousNumber);
+            const current = parseFloat(currentNumber);
+            
+            switch (operator) {
+                case '+': result = prev + current; break;
+                case '-': result = prev - current; break;
+                case '*': result = prev * current; break;
+                case '/': 
+                    if (current === 0) {
+                        alert('不能除以0！');
+                        clearCalc();
+                        return;
+                    }
+                    result = prev / current; 
+                    break;
+                default: return;
+            }
+            
+            // 处理精度问题
+            result = Math.round(result * 100000000) / 100000000;
+            currentNumber = result.toString();
+            operator = '';
+            shouldResetScreen = true;
+            updateDisplay();
+        }
+
+        function clearCalc() {
+            currentNumber = '0';
+            previousNumber = '';
+            operator = '';
+            shouldResetScreen = false;
+            display.style.fontSize = '2.5rem';
+            updateDisplay();
+        }
+
+        function toggleSign() {
+            if (currentNumber === '0') return;
+            currentNumber = (parseFloat(currentNumber) * -1).toString();
+            updateDisplay();
+        }
+
+        function percent() {
+            currentNumber = (parseFloat(currentNumber) / 100).toString();
+            updateDisplay();
         }
     </script>
 </body>
